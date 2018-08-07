@@ -85,9 +85,8 @@ app.on('ready', function() {
 	// automatically (the listeners will be removed when the window is closed)
 	// and restore the maximized or full screen state
 	mainWindowState.manage(mainWindow);
-
 	//Check for check for updates if auto update is on after 2 seconds
-	//setTimeout(loadInitPage, 5000);
+	setTimeout(autoUpdateCheck, 5000);
 });
 
 // Quit when all windows are closed.
@@ -127,15 +126,17 @@ function newNotification(str){
 		}
 	);
 };
-
+//Pull update if auto_update is on
+function autoUpdateCheck(){
+	//get the auto update value
+	const auto_update = settings.get('auto_update');
+	if(auto_update === true){
+		console.log("Checking for updates with auto updater");
+		pullUpdate();
+	}
+};
 // In this file you can include the rest of your app's specific main process
 // code. You can also put them in separate files and import them here.
-
-function loadInitPage() {
-  console.log('loadInitPage is called')
-  setContainerState(true)
-  reloadMainWin()
-}
 
 function winLoadPage(page) {
 	switch(page) {
@@ -187,6 +188,26 @@ function reloadMainWin() {
  * External Functions
  */
 
+function isContainerRunning() {
+  //Get the container status of bitmarkNode
+  return new Promise(function(){
+    exec("docker inspect -f '{{.State.Running}}' bitmarkNode", (err, stdout, stderr) => {
+      //If the container is not setup, create it (no container exist)
+      if (err) {
+        return false;
+      } else{
+         //If the container is stopped, start it
+        var str = stdout.toString().trim();
+        if(str === "true"){
+          return true;
+        }
+        return false;
+      }
+    });
+  });
+}
+
+
 function containerCheck(){
 
 	//Get the container status of bitmarkNode
@@ -200,10 +221,12 @@ function containerCheck(){
 	  } else{
        //If the container is stopped, start it
       var str = stdout.toString().trim();
-      if(str === "false"){
-      startBitmarkNode_noNotif();
+      if(str.includes('false')){
+        console.log('check container false');
+        startBitmarkNode_noNotif();
       //mainWindow.reload();
       } else { // if docker is running
+        console.log('check container true');
         setContainerState(true)
         reloadMainWin()
       }
@@ -292,9 +315,56 @@ function createContainer(ip, net, dir, isWin){
   });
 };
 
+// Check for updates from bitmark/bitmark-node
+function pullUpdate(){
 
-  /* Directory Functions */
+	newNotification("Checking for updates. This may take some time.");
+	//Pull updates from the docker bitmark-node repo
+	exec("docker pull bitmark/bitmark-node", (err, stdout, stderr) => {
+	  if (err) {
+		  console.log("Failed to pull update");
+	    newNotification("There was an error checking for an update. Please check your Internet connection and restart the Docker application.");
+	    return;
+	  }
 
+	  //get the output
+	  var str = stdout.toString();
+
+	  //Check to see if the up to date text is present
+	  if(str.indexOf("Image is up to date for bitmark/bitmark-node") !== -1){
+		  console.log("No Updates");
+	  	newNotification("No updates to the Bitmark Node software have been found.");
+	  }
+	  //Check to see if the updated text is present
+	  else if(str.indexOf("Downloaded newer image for bitmark/bitmark-node") !== -1){
+	  	console.log("Updated");
+	  	newNotification("The Bitmark Node software has downloaded. Installing updates now.");
+      createContainerHelper();
+	  	newNotification("The Bitmark Node software has been updated.");
+	  }else{
+      console.log("Unknown update error");
+      setAppState('failUpdate');
+      isRunning = isContainerRunning();
+      isRunning.then(function(result) {
+        if (result) {
+          setContainerState(true);
+        } else {
+          setContainerState(false);
+        }
+        reloadMainWin();
+    }, function(err) {
+      setContainerState(false);
+      reloadMainWin();
+      console.log("check container error");
+    })
+    newNotification("There was an error checking for an update. Please check your Internet connection and restart the Docker application.");
+
+	  }
+
+	});
+};
+
+/* Directory Functions */
 //Check to see if dir is defined and if not create it
 function directoryCheck(dir){
 	//If the directory doesn't exist, create it
