@@ -364,6 +364,23 @@ function pullUpdate(){
 	});
 };
 
+// Start the bitmarkNode Docker container without a notification
+function startBitmarkNode_noNotif(){
+	//Start the container named bitmarkNode
+	exec("docker start bitmarkNode", (err, stdout, stderr) => {
+	  if (err) {
+		// node couldn't execute the command
+      setContainerState(false);
+      reloadMainWin();
+	    console.log("Failed to start container");
+	    return;
+	  }
+    setContainerState(true);
+    console.log("Start container");
+	  console.log(`${stdout}`);
+    reloadMainWin();
+	});
+};
 /* Directory Functions */
 //Check to see if dir is defined and if not create it
 function directoryCheck(dir){
